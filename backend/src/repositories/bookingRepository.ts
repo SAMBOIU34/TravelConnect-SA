@@ -32,3 +32,22 @@ export function createBooking(input: Omit<BookingRecord, 'id' | 'createdAt' | 'u
 
   return booking;
 }
+
+export function updateBookingStatus(id: string, status: string) {
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT id, guest_name AS guestName, hotel_id AS hotelId, status, created_at AS createdAt, updated_at AS updatedAt FROM bookings WHERE id = ?').get(id) as BookingRecord | undefined;
+  if (!existing) return undefined;
+
+  db.prepare(`
+    UPDATE bookings
+    SET status = ?, updated_at = ?
+    WHERE id = ?
+  `).run(status, now, id);
+
+  return { ...existing, status, updatedAt: now } as BookingRecord;
+}
+
+export function deleteBooking(id: string) {
+  const result = db.prepare('DELETE FROM bookings WHERE id = ?').run(id);
+  return result.changes > 0;
+}

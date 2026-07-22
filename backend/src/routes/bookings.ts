@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../lib/middleware.js';
-import { createBooking, listBookings } from '../repositories/bookingRepository.js';
+import { createBooking, deleteBooking, listBookings, updateBookingStatus } from '../repositories/bookingRepository.js';
 import { createAuditEntry } from '../repositories/auditRepository.js';
 
 const router = Router();
@@ -22,9 +22,28 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 router.post('/:bookingId/status', authMiddleware, (req, res) => {
+  const bookingId = Array.isArray(req.params.bookingId) ? req.params.bookingId[0] : req.params.bookingId;
   const newStatus = req.body.status || 'pending';
+  const booking = updateBookingStatus(bookingId, newStatus);
+
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
   createAuditEntry({ entity: 'booking', action: 'status_changed', details: `Booking status updated to ${newStatus}` });
-  res.json({ success: true, message: `Booking status updated to ${newStatus}` });
+  res.json({ success: true, message: `Booking status updated to ${newStatus}`, booking });
+});
+
+router.delete('/:bookingId', authMiddleware, (req, res) => {
+  const bookingId = Array.isArray(req.params.bookingId) ? req.params.bookingId[0] : req.params.bookingId;
+  const removed = deleteBooking(bookingId);
+
+  if (!removed) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
+  createAuditEntry({ entity: 'booking', action: 'deleted', details: `Booking ${bookingId} deleted` });
+  res.json({ success: true, message: 'Booking deleted successfully' });
 });
 
 export default router;

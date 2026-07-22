@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Building2, LayoutDashboard, Users, Hotel, LogIn, ShieldCheck, CalendarDays, BedDouble, CheckCircle2, Clock3, PlusCircle } from 'lucide-react';
+import { Building2, LayoutDashboard, Users, Hotel, LogIn, ShieldCheck, CalendarDays, BedDouble, CheckCircle2, Clock3, PlusCircle, Pencil, Trash2 } from 'lucide-react';
 import axios from 'axios';
 
 function App() {
@@ -108,6 +108,7 @@ function HotelsPage() {
   const [city, setCity] = useState('');
   const [country, setCountry] = useState('South Africa');
   const [status, setStatus] = useState('pending');
+  const [editingHotelId, setEditingHotelId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState('');
   const [roomCategory, setRoomCategory] = useState('standard');
   const [roomPrice, setRoomPrice] = useState('');
@@ -128,15 +129,41 @@ function HotelsPage() {
     loadHotels();
   }, []);
 
-  const handleCreateHotel = async (event: React.FormEvent) => {
+  const resetHotelForm = () => {
+    setName('');
+    setCity('');
+    setCountry('South Africa');
+    setStatus('pending');
+    setEditingHotelId(null);
+  };
+
+  const handleCreateOrUpdateHotel = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      await axios.post('/api/hotels', { name, city, country, status }, { headers: { Authorization: 'Bearer test-token' } });
-      setName('');
-      setCity('');
-      setCountry('South Africa');
-      setStatus('pending');
-      loadHotels();
+      if (editingHotelId) {
+        await axios.put(`/api/hotels/${editingHotelId}`, { name, city, country, status }, { headers: { Authorization: 'Bearer test-token' } });
+      } else {
+        await axios.post('/api/hotels', { name, city, country, status }, { headers: { Authorization: 'Bearer test-token' } });
+      }
+      resetHotelForm();
+      await loadHotels();
+    } catch {
+      // No-op for now
+    }
+  };
+
+  const handleEditHotel = (hotel: any) => {
+    setEditingHotelId(hotel.id);
+    setName(hotel.name);
+    setCity(hotel.city);
+    setCountry(hotel.country);
+    setStatus(hotel.status);
+  };
+
+  const handleDeleteHotel = async (hotelId: string) => {
+    try {
+      await axios.delete(`/api/hotels/${hotelId}`, { headers: { Authorization: 'Bearer test-token' } });
+      await loadHotels();
     } catch {
       // No-op for now
     }
@@ -175,12 +202,15 @@ function HotelsPage() {
       <article className="card">
         <div className="card-title"><Building2 size={18} /> Hotel Administration</div>
         <p>Register properties, manage rooms, pricing, availability, and approval states from a single admin workspace.</p>
-        <form className="form-stack" onSubmit={handleCreateHotel}>
+        <form className="form-stack" onSubmit={handleCreateOrUpdateHotel}>
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Hotel name" />
           <input value={city} onChange={(event) => setCity(event.target.value)} placeholder="City" />
           <input value={country} onChange={(event) => setCountry(event.target.value)} placeholder="Country" />
           <input value={status} onChange={(event) => setStatus(event.target.value)} placeholder="Status" />
-          <button className="primary-btn" type="submit">Create hotel</button>
+          <div className="inline-actions">
+            <button className="primary-btn" type="submit">{editingHotelId ? 'Update hotel' : 'Create hotel'}</button>
+            {editingHotelId ? <button className="secondary-btn" type="button" onClick={resetHotelForm}>Cancel</button> : null}
+          </div>
         </form>
       </article>
 
@@ -206,11 +236,21 @@ function HotelsPage() {
 
       <article className="card">
         <div className="card-title"><CheckCircle2 size={18} /> Approval Queue</div>
-        <ul className="list">
+        <div className="inline-list">
           {hotels.map((hotel) => (
-            <li key={hotel.id}>{hotel.name} — {hotel.status}</li>
+            <div className="inline-row" key={hotel.id}>
+              <div>
+                <strong>{hotel.name}</strong>
+                <div className="meta">{hotel.city}, {hotel.country}</div>
+              </div>
+              <div className="inline-actions">
+                <span className={`status-badge ${hotel.status}`}>{hotel.status}</span>
+                <button className="icon-btn" type="button" onClick={() => handleEditHotel(hotel)}><Pencil size={14} /></button>
+                <button className="icon-btn danger" type="button" onClick={() => handleDeleteHotel(hotel.id)}><Trash2 size={14} /></button>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       </article>
     </section>
   );
@@ -221,7 +261,8 @@ function BookingsPage() {
   const [guestName, setGuestName] = useState('');
   const [hotelId, setHotelId] = useState('');
   const [status, setStatus] = useState('pending');
-  const [statusUpdate, setStatusUpdate] = useState('');
+  const [statusUpdate, setStatusUpdate] = useState('confirmed');
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
   const loadBookings = async () => {
     try {
@@ -236,24 +277,45 @@ function BookingsPage() {
     loadBookings();
   }, []);
 
+  const resetBookingForm = () => {
+    setGuestName('');
+    setHotelId('');
+    setStatus('pending');
+    setSelectedBookingId(null);
+    setStatusUpdate('confirmed');
+  };
+
   const handleCreateBooking = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
       await axios.post('/api/bookings', { guestName, hotelId, status }, { headers: { Authorization: 'Bearer test-token' } });
-      setGuestName('');
-      setHotelId('');
-      setStatus('pending');
-      loadBookings();
+      resetBookingForm();
+      await loadBookings();
     } catch {
       // No-op for now
     }
   };
 
-  const handleStatusUpdate = async (bookingId: string) => {
+  const handleSelectBooking = (booking: any) => {
+    setSelectedBookingId(booking.id);
+    setStatusUpdate(booking.status || 'confirmed');
+  };
+
+  const handleStatusUpdate = async () => {
+    if (!selectedBookingId) return;
     try {
-      await axios.post(`/api/bookings/${bookingId}/status`, { status: statusUpdate || 'confirmed' }, { headers: { Authorization: 'Bearer test-token' } });
-      setStatusUpdate('');
-      loadBookings();
+      await axios.post(`/api/bookings/${selectedBookingId}/status`, { status: statusUpdate || 'confirmed' }, { headers: { Authorization: 'Bearer test-token' } });
+      setStatusUpdate('confirmed');
+      await loadBookings();
+    } catch {
+      // No-op for now
+    }
+  };
+
+  const handleDeleteBooking = async (bookingId: string) => {
+    try {
+      await axios.delete(`/api/bookings/${bookingId}`, { headers: { Authorization: 'Bearer test-token' } });
+      await loadBookings();
     } catch {
       // No-op for now
     }
@@ -268,11 +330,21 @@ function BookingsPage() {
 
       <article className="card">
         <div className="card-title"><Clock3 size={18} /> Booking Queue</div>
-        <ul className="list">
+        <div className="inline-list">
           {bookings.map((booking) => (
-            <li key={booking.id}>{booking.guestName} — {booking.status}</li>
+            <div className="inline-row" key={booking.id}>
+              <div>
+                <strong>{booking.guestName}</strong>
+                <div className="meta">Hotel {booking.hotelId}</div>
+              </div>
+              <div className="inline-actions">
+                <span className={`status-badge ${booking.status}`}>{booking.status}</span>
+                <button className="icon-btn" type="button" onClick={() => handleSelectBooking(booking)}><Pencil size={14} /></button>
+                <button className="icon-btn danger" type="button" onClick={() => handleDeleteBooking(booking.id)}><Trash2 size={14} /></button>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       </article>
 
       <article className="card">
@@ -289,7 +361,7 @@ function BookingsPage() {
         <div className="card-title"><CheckCircle2 size={18} /> Update Booking Status</div>
         <div className="form-stack">
           <input value={statusUpdate} onChange={(event) => setStatusUpdate(event.target.value)} placeholder="New status" />
-          <button className="primary-btn" onClick={() => bookings[0] && handleStatusUpdate(bookings[0].id)}>Update selected booking</button>
+          <button className="primary-btn" type="button" onClick={handleStatusUpdate}>Update selected booking</button>
         </div>
       </article>
     </section>

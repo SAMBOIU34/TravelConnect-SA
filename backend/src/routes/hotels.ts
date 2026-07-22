@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../lib/middleware.js';
-import { createHotel, listHotels } from '../repositories/hotelRepository.js';
+import { createHotel, deleteHotel, listHotels, updateHotel } from '../repositories/hotelRepository.js';
 import { createRoom, listRoomsByHotel } from '../repositories/roomRepository.js';
 import { createAvailability, listAvailability } from '../repositories/availabilityRepository.js';
 import { createAuditEntry } from '../repositories/auditRepository.js';
@@ -22,6 +22,35 @@ router.post('/', authMiddleware, (req, res) => {
   createAuditEntry({ entity: 'hotel', action: 'created', details: `Hotel ${hotel.name} registered` });
 
   res.status(201).json({ success: true, message: 'Hotel registered successfully', hotel });
+});
+
+router.put('/:hotelId', authMiddleware, (req, res) => {
+  const hotelId = Array.isArray(req.params.hotelId) ? req.params.hotelId[0] : req.params.hotelId;
+  const hotel = updateHotel(hotelId, {
+    name: req.body.name,
+    city: req.body.city,
+    country: req.body.country,
+    status: req.body.status
+  });
+
+  if (!hotel) {
+    return res.status(404).json({ success: false, message: 'Hotel not found' });
+  }
+
+  createAuditEntry({ entity: 'hotel', action: 'updated', details: `Hotel ${hotel.name} updated` });
+  res.json({ success: true, message: 'Hotel updated successfully', hotel });
+});
+
+router.delete('/:hotelId', authMiddleware, (req, res) => {
+  const hotelId = Array.isArray(req.params.hotelId) ? req.params.hotelId[0] : req.params.hotelId;
+  const removed = deleteHotel(hotelId);
+
+  if (!removed) {
+    return res.status(404).json({ success: false, message: 'Hotel not found' });
+  }
+
+  createAuditEntry({ entity: 'hotel', action: 'deleted', details: `Hotel ${hotelId} deleted` });
+  res.json({ success: true, message: 'Hotel deleted successfully' });
 });
 
 router.post('/:hotelId/approve', authMiddleware, (req, res) => {
