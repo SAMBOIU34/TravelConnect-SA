@@ -108,6 +108,12 @@ function HotelsPage() {
   const [city, setCity] = useState('');
   const [country, setCountry] = useState('South Africa');
   const [status, setStatus] = useState('pending');
+  const [roomName, setRoomName] = useState('');
+  const [roomCategory, setRoomCategory] = useState('standard');
+  const [roomPrice, setRoomPrice] = useState('');
+  const [roomInventory, setRoomInventory] = useState('1');
+  const [availabilityDate, setAvailabilityDate] = useState('');
+  const [availabilityCount, setAvailabilityCount] = useState('1');
 
   const loadHotels = async () => {
     try {
@@ -136,6 +142,34 @@ function HotelsPage() {
     }
   };
 
+  const handleCreateRoom = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const hotelId = hotels[0]?.id;
+    if (!hotelId) return;
+    try {
+      await axios.post(`/api/hotels/${hotelId}/rooms`, { name: roomName, category: roomCategory, price: roomPrice, inventory: roomInventory }, { headers: { Authorization: 'Bearer test-token' } });
+      setRoomName('');
+      setRoomCategory('standard');
+      setRoomPrice('');
+      setRoomInventory('1');
+    } catch {
+      // No-op for now
+    }
+  };
+
+  const handleCreateAvailability = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const hotelId = hotels[0]?.id;
+    if (!hotelId) return;
+    try {
+      await axios.post(`/api/hotels/${hotelId}/availability`, { roomId: 'placeholder-room', date: availabilityDate, available: availabilityCount }, { headers: { Authorization: 'Bearer test-token' } });
+      setAvailabilityDate('');
+      setAvailabilityCount('1');
+    } catch {
+      // No-op for now
+    }
+  };
+
   return (
     <section className="grid">
       <article className="card">
@@ -152,20 +186,22 @@ function HotelsPage() {
 
       <article className="card">
         <div className="card-title"><BedDouble size={18} /> Rooms & Pricing</div>
-        <ul className="list">
-          <li>Add deluxe, suite, and standard room categories</li>
-          <li>Set nightly pricing and inventory count</li>
-          <li>Link room inventory to availability calendars</li>
-        </ul>
+        <form className="form-stack" onSubmit={handleCreateRoom}>
+          <input value={roomName} onChange={(event) => setRoomName(event.target.value)} placeholder="Room name" />
+          <input value={roomCategory} onChange={(event) => setRoomCategory(event.target.value)} placeholder="Room category" />
+          <input value={roomPrice} onChange={(event) => setRoomPrice(event.target.value)} placeholder="Price" />
+          <input value={roomInventory} onChange={(event) => setRoomInventory(event.target.value)} placeholder="Inventory" />
+          <button className="primary-btn" type="submit">Add room</button>
+        </form>
       </article>
 
       <article className="card">
         <div className="card-title"><CalendarDays size={18} /> Availability Calendar</div>
-        <ul className="list">
-          <li>Block dates when rooms are unavailable</li>
-          <li>Adjust availability for peak travel periods</li>
-          <li>Keep room inventory aligned with real bookings</li>
-        </ul>
+        <form className="form-stack" onSubmit={handleCreateAvailability}>
+          <input value={availabilityDate} onChange={(event) => setAvailabilityDate(event.target.value)} placeholder="Date (YYYY-MM-DD)" />
+          <input value={availabilityCount} onChange={(event) => setAvailabilityCount(event.target.value)} placeholder="Available count" />
+          <button className="primary-btn" type="submit">Set availability</button>
+        </form>
       </article>
 
       <article className="card">
@@ -185,6 +221,7 @@ function BookingsPage() {
   const [guestName, setGuestName] = useState('');
   const [hotelId, setHotelId] = useState('');
   const [status, setStatus] = useState('pending');
+  const [statusUpdate, setStatusUpdate] = useState('');
 
   const loadBookings = async () => {
     try {
@@ -206,6 +243,16 @@ function BookingsPage() {
       setGuestName('');
       setHotelId('');
       setStatus('pending');
+      loadBookings();
+    } catch {
+      // No-op for now
+    }
+  };
+
+  const handleStatusUpdate = async (bookingId: string) => {
+    try {
+      await axios.post(`/api/bookings/${bookingId}/status`, { status: statusUpdate || 'confirmed' }, { headers: { Authorization: 'Bearer test-token' } });
+      setStatusUpdate('');
       loadBookings();
     } catch {
       // No-op for now
@@ -236,6 +283,14 @@ function BookingsPage() {
           <input value={status} onChange={(event) => setStatus(event.target.value)} placeholder="Booking status" />
           <button className="primary-btn" type="submit">Create booking</button>
         </form>
+      </article>
+
+      <article className="card">
+        <div className="card-title"><CheckCircle2 size={18} /> Update Booking Status</div>
+        <div className="form-stack">
+          <input value={statusUpdate} onChange={(event) => setStatusUpdate(event.target.value)} placeholder="New status" />
+          <button className="primary-btn" onClick={() => bookings[0] && handleStatusUpdate(bookings[0].id)}>Update selected booking</button>
+        </div>
       </article>
     </section>
   );
