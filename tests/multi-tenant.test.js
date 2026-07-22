@@ -82,5 +82,7 @@ test('admin analytics endpoint returns aggregated metrics', { concurrency: false
     .set('Authorization', `Bearer ${adminLogin.body.token}`);
 
   assert.equal(analyticsResponse.status, 200);
-  assert.ok(analyticsResponse.body.bookings);
+  assert.ok(analyticsResponse.body.summary.bookings);
+  assert.ok(Array.isArray(analyticsResponse.body.recentBookings));
+  assert.ok(Array.isArray(analyticsResponse.body.recentAuditLogs));
 });

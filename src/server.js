@@ -676,9 +676,22 @@ function createApp() {
       if (!user || user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
       const bookings = await allSql('SELECT COUNT(*) AS count, SUM(amount) AS revenue FROM bookings');
       const hotels = await allSql('SELECT COUNT(*) AS count FROM hotels');
+      const pendingHotels = await allSql('SELECT COUNT(*) AS count FROM hotels WHERE status = ? AND deletedAt IS NULL', ['pending_review']);
       const notifications = await allSql('SELECT COUNT(*) AS count FROM notifications');
       const auditLogs = await allSql('SELECT COUNT(*) AS count FROM audit_logs');
-      res.json({ bookings: bookings[0], hotels: hotels[0], notifications: notifications[0], auditLogs: auditLogs[0] });
+      const recentBookings = await allSql('SELECT * FROM bookings WHERE deletedAt IS NULL ORDER BY createdAt DESC LIMIT 5');
+      const recentAuditLogs = await allSql('SELECT * FROM audit_logs ORDER BY createdAt DESC LIMIT 5');
+      res.json({
+        summary: {
+          bookings: bookings[0],
+          hotels: hotels[0],
+          pendingHotels: pendingHotels[0],
+          notifications: notifications[0],
+          auditLogs: auditLogs[0]
+        },
+        recentBookings,
+        recentAuditLogs
+      });
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
