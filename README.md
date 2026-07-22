@@ -1,31 +1,33 @@
 # TravelConnect SA
 
-TravelConnect SA is a foundation-level tourism SaaS platform for TravelConnect Africa (Pty) Ltd. The repository now includes:
+TravelConnect SA is a foundation-level tourism SaaS platform for TravelConnect Africa (Pty) Ltd. The repository now includes a production-ready hospitality and booking platform foundation with:
 
-- A modular Express backend with auth, user, hotel, and dashboard routes
-- JWT-based auth helpers, validation, and middleware
-- A responsive React/Vite frontend shell for the brand experience
-- API documentation via Swagger UI at /api/docs
-- Backend tests covering health, registration, and protected routes
+- a modular Express backend with authentication, bookings, invoices, and analytics routes
+- tenant and partner onboarding flows
+- notification queueing for email/SMS-style delivery
+- OpenAPI documentation and Swagger UI
+- Docker deployment support and automated tests
+- a seed admin account and deployment workflow
 
 ## Quick start
 
-### Backend
-
 ```bash
-cd backend
 npm install
-npm run dev
+cp .env.example .env
+npm start
 ```
 
-### Frontend
+## API highlights
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+- POST /api/auth/register
+- POST /api/auth/login
+- GET /api/me
+- POST /api/bookings
+- POST /api/bookings/:id/cancel
+- GET /api/analytics
+- GET /api/reports
+- GET /api-docs
 
-## Notes
+## Deployment
 
-This initial release focuses on the foundation architecture, secure API patterns, visual identity, and a scalable directory structure suitable for commercial expansion.
+See [DEPLOYMENT.md](DEPLOYMENT.md).
