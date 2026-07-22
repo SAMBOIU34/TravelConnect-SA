@@ -15,6 +15,13 @@ type AuthState = {
 
 const AUTH_STORAGE_KEY = 'travelconnect-auth';
 
+function getRoleBadgeClass(role: string) {
+  const normalizedRole = (role || 'user').toLowerCase();
+  if (normalizedRole === 'admin') return 'role-admin';
+  if (normalizedRole === 'manager') return 'role-manager';
+  return 'role-user';
+}
+
 function getStoredAuth(): AuthState | null {
   if (typeof window === 'undefined') return null;
   const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
@@ -39,12 +46,47 @@ function persistAuth(auth: AuthState | null) {
 
 function App() {
   const [auth, setAuth] = useState<AuthState | null>(getStoredAuth());
+  const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   useEffect(() => {
     persistAuth(auth);
   }, [auth]);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    let isCancelled = false;
+
+    const checkApiHealth = async () => {
+      try {
+        const response = await axios.get('/health');
+        if (!isCancelled) {
+          setApiStatus(response.status === 200 ? 'online' : 'offline');
+        }
+      } catch {
+        if (!isCancelled) {
+          setApiStatus('offline');
+        }
+      }
+    };
+
+    void checkApiHealth();
+    const intervalId = window.setInterval(() => {
+      void checkApiHealth();
+    }, 15000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    if (auth?.token) {
+      try {
+        await axios.post('/api/auth/logout', {}, { headers: { Authorization: `Bearer ${auth.token}` } });
+      } catch {
+        // Ignore backend logout errors and clear the local session.
+      }
+    }
     setAuth(null);
   };
 
@@ -75,10 +117,20 @@ function App() {
             <h2>Modern tourism operations at scale</h2>
           </div>
           <div className="topbar-actions">
-            {auth ? <span className="status-badge confirmed">Signed in as {auth.user.email}</span> : <span className="status-badge pending">Not signed in</span>}
-            {auth ? <button className="secondary-btn" onClick={handleLogout}>Logout</button> : <NavLink to="/auth" className="primary-btn">Sign in</NavLink>}
+            {auth ? (
+              <>
+                <span className="status-badge confirmed">Signed in as {auth.user.email}</span>
+                <span className={`role-chip ${getRoleBadgeClass(auth.user.role)}`}>{auth.user.role}</span>
+              </>
+            ) : <span className="status-badge pending">Not signed in</span>}
+            {auth ? <button className="secondary-btn" onClick={() => void handleLogout()}>Logout</button> : <NavLink to="/auth" className="primary-btn">Sign in</NavLink>}
           </div>
         </header>
+
+        <div className={`api-status-banner ${apiStatus}`}>
+          <span className="api-dot" />
+          {apiStatus === 'online' ? 'API connected and responding' : apiStatus === 'checking' ? 'Checking API connection...' : 'API offline — backend may be unavailable'}
+        </div>
 
         <Routes>
           <Route path="/" element={<DashboardPage auth={auth} />} />
@@ -93,6 +145,34 @@ function App() {
 }
 
 function DashboardPage({ auth }: { auth: AuthState | null }) {
+  const [auditEntries, setAuditEntries] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadAuditEntries = async () => {
+      if (!auth?.token) {
+        setAuditEntries([]);
+        return;
+      }
+
+      try {
+        const response = await axios.get('/api/audit', { headers: { Authorization: `Bearer ${auth.token}` } });
+        setAuditEntries(response.data.auditEntries || []);
+      } catch {
+        setAuditEntries([]);
+      }
+    };
+
+    void loadAuditEntries();
+  }, [auth?.token]);
+
+  const formatTimestamp = (value: string) => {
+    try {
+      return new Date(value).toLocaleString();
+    } catch {
+      return value;
+    }
+  };
+
   return (
     <section className="grid">
       <article className="card hero-card">
@@ -131,24 +211,100 @@ function DashboardPage({ auth }: { auth: AuthState | null }) {
         <div className="card-title"><Users size={18}/> Admin Access</div>
         <p>{auth ? `Signed in as ${auth.user.email} with ${auth.user.role} privileges.` : 'Sign in to unlock management screens and audit tools.'}</p>
       </article>
+
+      <article className="card">
+        <div className="card-title"><Clock3 size={18}/> Recent Activity</div>
+        <div className="activity-feed">
+          {auditEntries.length === 0 ? (
+            <p className="meta">No recent activity yet. Actions taken in the platform will appear here.</p>
+          ) : auditEntries.slice(0, 6).map((entry) => (
+            <div className="activity-item" key={entry.id}>
+              <div className="activity-main">
+                <strong>{entry.action.replace(/_/g, ' ')}</strong>
+                <div className="meta">{entry.details}</div>
+              </div>
+              <span className="activity-time">{formatTimestamp(entry.createdAt)}</span>
+            </div>
+          ))}
+        </div>
+      </article>
     </section>
   );
 }
 
 function UsersPage({ auth }: { auth: AuthState | null }) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
+
+  const loadUsers = async () => {
+    if (!auth?.token) {
+      setUsers([]);
+      return;
+    }
+
+    try {
+      const response = await axios.get('/api/users', { headers: { Authorization: `Bearer ${auth.token}` } });
+      setUsers(response.data.users || []);
+      setMessage(null);
+    } catch (error: any) {
+      setUsers([]);
+      setMessage(error.response?.data?.message || 'Unable to load users');
+      setIsError(true);
+    }
+  };
+
+  useEffect(() => {
+    void loadUsers();
+  }, [auth?.token]);
+
+  const handleRoleChange = async (userId: string, role: string) => {
+    if (!auth?.token) return;
+    try {
+      await axios.put(`/api/users/${userId}/role`, { role }, { headers: { Authorization: `Bearer ${auth.token}` } });
+      await loadUsers();
+      setMessage('Role updated successfully');
+      setIsError(false);
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || 'Unable to update role');
+      setIsError(true);
+    }
+  };
+
   return (
     <section className="grid">
       <article className="card">
-        <h3>User Management</h3>
-        <p>Create, approve, suspend, and assign roles from a unified administration experience.</p>
+        <div className="card-title"><Users size={18} /> User Management</div>
+        <p>Approve, review, and assign partner roles from a single admin workspace.</p>
+        {message ? <div className={`message ${isError ? 'error' : 'success'}`}>{message}</div> : null}
       </article>
+
       <article className="card">
-        <div className="card-title"><Users size={18} /> Admin Actions</div>
-        <ul className="list">
-          <li>Approve new partner accounts</li>
-          <li>Assign super admin or hotel admin roles</li>
-          <li>Review login history and access changes</li>
-        </ul>
+        <div className="card-title"><ShieldCheck size={18} /> Admin Accounts</div>
+        <div className="table-card">
+          <div className="table-head">
+            <span>Name</span>
+            <span>Email</span>
+            <span>Role</span>
+            <span>Status</span>
+          </div>
+          {users.map((user) => (
+            <div className="table-row" key={user.id}>
+              <span>{user.name}</span>
+              <span>{user.email}</span>
+              <div className="role-control">
+                <span className={`role-badge ${getRoleBadgeClass(user.role)}`}>{user.role}</span>
+                <select value={user.role} onChange={(event) => void handleRoleChange(user.id, event.target.value)}>
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="user">User</option>
+                </select>
+              </div>
+              <span className={`status-badge ${user.isActive ? 'confirmed' : 'cancelled'}`}>{user.isActive ? 'Active' : 'Inactive'}</span>
+            </div>
+          ))}
+          {!auth?.token ? <p className="meta">Sign in to view and manage user access.</p> : null}
+        </div>
       </article>
     </section>
   );
@@ -443,7 +599,11 @@ function AuthPage({ auth, onAuthChange }: { auth: AuthState | null; onAuthChange
     event.preventDefault();
     try {
       const response = await axios.post('/api/auth/login', { email: loginEmail, password: loginPassword });
-      onAuthChange(response.data);
+      onAuthChange({
+        token: response.data.token,
+        refreshToken: response.data.refreshToken,
+        user: response.data.user
+      });
       setMessage('Signed in successfully');
       setIsError(false);
     } catch (error: any) {
@@ -458,7 +618,11 @@ function AuthPage({ auth, onAuthChange }: { auth: AuthState | null; onAuthChange
       const registerResponse = await axios.post('/api/auth/register', { name: registerName, email: registerEmail, password: registerPassword });
       if (registerResponse.data.success) {
         const loginResponse = await axios.post('/api/auth/login', { email: registerEmail, password: registerPassword });
-        onAuthChange(loginResponse.data);
+        onAuthChange({
+          token: loginResponse.data.token,
+          refreshToken: loginResponse.data.refreshToken,
+          user: loginResponse.data.user
+        });
         setMessage('Account created and signed in');
         setIsError(false);
       }

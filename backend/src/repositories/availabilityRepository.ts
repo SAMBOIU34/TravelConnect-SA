@@ -30,6 +30,26 @@ export function createAvailability(input: Omit<AvailabilityRecord, 'id' | 'creat
   return record;
 }
 
+export function updateAvailability(id: string, input: Partial<Omit<AvailabilityRecord, 'id' | 'createdAt' | 'updatedAt'>>) {
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT id, hotel_id AS hotelId, room_id AS roomId, date, available, created_at AS createdAt, updated_at AS updatedAt FROM availability WHERE id = ?').get(id) as AvailabilityRecord | undefined;
+  if (!existing) return undefined;
+
+  const updates = { ...existing, ...input, updatedAt: now };
+  db.prepare(`
+    UPDATE availability
+    SET room_id = ?, date = ?, available = ?, updated_at = ?
+    WHERE id = ?
+  `).run(updates.roomId, updates.date, updates.available, updates.updatedAt, id);
+
+  return updates as AvailabilityRecord;
+}
+
+export function deleteAvailability(id: string) {
+  const result = db.prepare('DELETE FROM availability WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
 export function listAvailability(hotelId: string) {
   return db.prepare('SELECT id, hotel_id AS hotelId, room_id AS roomId, date, available, created_at AS createdAt, updated_at AS updatedAt FROM availability WHERE hotel_id = ? ORDER BY date ASC').all(hotelId) as AvailabilityRecord[];
 }

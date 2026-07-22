@@ -10,10 +10,18 @@ router.get('/', authMiddleware, (_req, res) => {
 });
 
 router.post('/', authMiddleware, (req, res) => {
+  const guestName = String(req.body.guestName || '').trim();
+  const hotelId = String(req.body.hotelId || '').trim();
+  const status = String(req.body.status || 'pending').trim();
+
+  if (!guestName || !hotelId) {
+    return res.status(400).json({ success: false, message: 'Guest name and hotel ID are required' });
+  }
+
   const booking = createBooking({
-    guestName: req.body.guestName,
-    hotelId: req.body.hotelId,
-    status: req.body.status || 'pending'
+    guestName,
+    hotelId,
+    status: status || 'pending'
   });
 
   createAuditEntry({ entity: 'booking', action: 'created', details: `Booking ${booking.id} created` });

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { validateBody } from '../lib/middleware.js';
 import { forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema } from '../lib/validation.js';
-import { comparePassword, hashPassword, signRefreshToken, signToken } from '../lib/auth.js';
+import { comparePassword, hashPassword, signRefreshToken, signToken, verifyRefreshToken } from '../lib/auth.js';
 import { createSession, revokeSession } from '../repositories/sessionRepository.js';
 import { createUser, findUserByEmail } from '../repositories/userRepository.js';
 
@@ -23,7 +23,12 @@ router.post('/register', validateBody(registerSchema), async (req, res) => {
     isActive: true
   });
 
-  res.status(201).json({ success: true, message: 'Registration successful', user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  res.status(201).json({
+    success: true,
+    message: 'Registration successful',
+    user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    userId: user.id
+  });
 });
 
 router.post('/login', validateBody(loginSchema), async (req, res) => {
@@ -52,6 +57,21 @@ router.post('/logout', (req, res) => {
     revokeSession(token);
   }
   res.json({ success: true, message: 'Logged out successfully' });
+});
+
+router.post('/refresh', (req, res) => {
+  const refreshToken = req.body.refreshToken;
+  if (!refreshToken) {
+    return res.status(400).json({ success: false, message: 'Refresh token is required' });
+  }
+
+  try {
+    const payload = verifyRefreshToken(refreshToken);
+    const token = signToken({ sub: payload.sub, role: payload.role });
+    res.json({ success: true, token, user: { id: payload.sub, role: payload.role } });
+  } catch {
+    res.status(401).json({ success: false, message: 'Invalid refresh token' });
+  }
 });
 
 router.post('/forgot-password', validateBody(forgotPasswordSchema), (_req, res) => {

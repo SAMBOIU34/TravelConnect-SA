@@ -34,3 +34,23 @@ export function createRoom(input: Omit<RoomRecord, 'id' | 'createdAt' | 'updated
 
   return room;
 }
+
+export function updateRoom(id: string, input: Partial<Omit<RoomRecord, 'id' | 'createdAt' | 'updatedAt'>>) {
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT id, hotel_id AS hotelId, name, category, price, inventory, created_at AS createdAt, updated_at AS updatedAt FROM rooms WHERE id = ?').get(id) as RoomRecord | undefined;
+  if (!existing) return undefined;
+
+  const updates = { ...existing, ...input, updatedAt: now };
+  db.prepare(`
+    UPDATE rooms
+    SET name = ?, category = ?, price = ?, inventory = ?, updated_at = ?
+    WHERE id = ?
+  `).run(updates.name, updates.category, updates.price, updates.inventory, updates.updatedAt, id);
+
+  return updates as RoomRecord;
+}
+
+export function deleteRoom(id: string) {
+  const result = db.prepare('DELETE FROM rooms WHERE id = ?').run(id);
+  return result.changes > 0;
+}

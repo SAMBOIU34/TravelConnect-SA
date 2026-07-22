@@ -43,8 +43,8 @@ runMigrations();
 registerRoutes(app);
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(port, () => {
-    console.log(`TravelConnect API listening on http://localhost:${port}`);
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`TravelConnect API listening on http://0.0.0.0:${port}`);
   });
 }
 
