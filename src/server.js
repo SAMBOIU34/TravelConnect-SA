@@ -132,6 +132,9 @@ async function initializeDatabase() {
       tenantId TEXT NOT NULL,
       name TEXT NOT NULL,
       location TEXT NOT NULL,
+      description TEXT,
+      starRating INTEGER,
+      amenities TEXT,
       status TEXT DEFAULT 'pending_review',
       createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
       updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -551,9 +554,9 @@ function createApp() {
   app.post('/api/partners/hotels', authMiddleware, async (req, res) => {
     try {
       const hotelId = uuidv4();
-      const { name, location } = req.body;
+      const { name, location, description, starRating, amenities } = req.body;
       if (!name || !location) return res.status(400).json({ message: 'Hotel name and location are required' });
-      await runSql('INSERT INTO hotels (id, tenantId, name, location, status) VALUES (?, ?, ?, ?, ?)', [hotelId, req.user.tenantId, name, location, 'pending_review']);
+      await runSql('INSERT INTO hotels (id, tenantId, name, location, description, starRating, amenities, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [hotelId, req.user.tenantId, name, location, description || null, starRating || null, amenities ? JSON.stringify(amenities) : null, 'pending_review']);
       await recordAuditLog(req.user.tenantId, req.user.userId, 'hotel_created', `${name} submitted for review`);
       await queueNotification(req.user.tenantId, req.user.userId, 'email', 'property_review', { name });
       res.status(201).json({ hotelId, status: 'pending_review' });
@@ -565,7 +568,24 @@ function createApp() {
   app.get('/api/partners/hotels', authMiddleware, async (req, res) => {
     try {
       const rows = await allSql('SELECT * FROM hotels WHERE tenantId = ? AND deletedAt IS NULL ORDER BY createdAt DESC', [req.user.tenantId]);
-      res.json(rows);
+      res.json(rows.map((hotel) => ({
+        ...hotel,
+        amenities: hotel.amenities ? JSON.parse(hotel.amenities) : []
+      })));
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get('/api/admin/hotels', authMiddleware, async (req, res) => {
+    try {
+      const user = await getSql('SELECT role FROM users WHERE id = ? AND deletedAt IS NULL', [req.user.userId]);
+      if (!user || user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+      const rows = await allSql('SELECT * FROM hotels WHERE deletedAt IS NULL ORDER BY createdAt DESC');
+      res.json(rows.map((hotel) => ({
+        ...hotel,
+        amenities: hotel.amenities ? JSON.parse(hotel.amenities) : []
+      })));
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
