@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Building2, LayoutDashboard, Users, Hotel, LogIn, ShieldCheck, CalendarDays } from 'lucide-react';
+import { Building2, LayoutDashboard, Users, Hotel, LogIn, ShieldCheck, CalendarDays, BedDouble, CheckCircle2, Clock3, PlusCircle } from 'lucide-react';
 
 function App() {
   return (
@@ -82,15 +82,96 @@ function DashboardPage() {
 }
 
 function UsersPage() {
-  return <section className="card"><h3>User Management</h3><p>Create, approve, suspend, and assign roles from a unified administration experience.</p></section>;
+  return (
+    <section className="grid">
+      <article className="card">
+        <h3>User Management</h3>
+        <p>Create, approve, suspend, and assign roles from a unified administration experience.</p>
+      </article>
+      <article className="card">
+        <div className="card-title"><Users size={18} /> Admin Actions</div>
+        <ul className="list">
+          <li>Approve new partner accounts</li>
+          <li>Assign super admin or hotel admin roles</li>
+          <li>Review login history and access changes</li>
+        </ul>
+      </article>
+    </section>
+  );
 }
 
 function HotelsPage() {
-  return <section className="card"><h3>Hotel Management</h3><p>Register properties, manage rooms, pricing, amenities, availability, and gallery content.</p></section>;
+  return (
+    <section className="grid">
+      <article className="card">
+        <div className="card-title"><Building2 size={18} /> Hotel Administration</div>
+        <p>Register properties, manage rooms, pricing, availability, and approval states from a single admin workspace.</p>
+        <div className="form-stack">
+          <input placeholder="Hotel name" />
+          <input placeholder="City" />
+          <input placeholder="Country" />
+          <button className="primary-btn">Create hotel</button>
+        </div>
+      </article>
+
+      <article className="card">
+        <div className="card-title"><BedDouble size={18} /> Rooms & Pricing</div>
+        <ul className="list">
+          <li>Add deluxe, suite, and standard room categories</li>
+          <li>Set nightly pricing and inventory count</li>
+          <li>Link room inventory to availability calendars</li>
+        </ul>
+      </article>
+
+      <article className="card">
+        <div className="card-title"><CalendarDays size={18} /> Availability Calendar</div>
+        <ul className="list">
+          <li>Block dates when rooms are unavailable</li>
+          <li>Adjust availability for peak travel periods</li>
+          <li>Keep room inventory aligned with real bookings</li>
+        </ul>
+      </article>
+
+      <article className="card">
+        <div className="card-title"><CheckCircle2 size={18} /> Approval Queue</div>
+        <ul className="list">
+          <li>Approve or reject hotel submissions</li>
+          <li>Flag properties that need updates</li>
+          <li>Track status history for review audits</li>
+        </ul>
+      </article>
+    </section>
+  );
 }
 
 function BookingsPage() {
-  return <section className="card"><h3>Bookings</h3><p>Track stay reservations, status changes, and payment readiness across the platform.</p></section>;
+  return (
+    <section className="grid">
+      <article className="card">
+        <div className="card-title"><CalendarDays size={18} /> Booking Operations</div>
+        <p>Review pending bookings, approve confirmations, and monitor status changes across the platform.</p>
+      </article>
+
+      <article className="card">
+        <div className="card-title"><Clock3 size={18} /> Booking Queue</div>
+        <ul className="list">
+          <li>Pending stays requiring confirmation</li>
+          <li>Confirmed bookings with active reservations</li>
+          <li>Cancelled bookings with audit trail details</li>
+        </ul>
+      </article>
+
+      <article className="card">
+        <div className="card-title"><PlusCircle size={18} /> Create Booking</div>
+        <div className="form-stack">
+          <input placeholder="Guest name" />
+          <input placeholder="Hotel ID" />
+          <input placeholder="Booking status" />
+          <button className="primary-btn">Create booking</button>
+        </div>
+      </article>
+    </section>
+  );
 }
 
 function AuthPage() {
