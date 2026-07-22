@@ -3,7 +3,51 @@ import { Routes, Route, NavLink } from 'react-router-dom';
 import { Building2, LayoutDashboard, Users, Hotel, LogIn, ShieldCheck, CalendarDays, BedDouble, CheckCircle2, Clock3, PlusCircle, Pencil, Trash2 } from 'lucide-react';
 import axios from 'axios';
 
+type AuthState = {
+  token: string;
+  refreshToken?: string;
+  user: {
+    id: string;
+    email: string;
+    role: string;
+  };
+};
+
+const AUTH_STORAGE_KEY = 'travelconnect-auth';
+
+function getStoredAuth(): AuthState | null {
+  if (typeof window === 'undefined') return null;
+  const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!stored) return null;
+
+  try {
+    return JSON.parse(stored) as AuthState;
+  } catch {
+    return null;
+  }
+}
+
+function persistAuth(auth: AuthState | null) {
+  if (typeof window === 'undefined') return;
+  if (!auth) {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+}
+
 function App() {
+  const [auth, setAuth] = useState<AuthState | null>(getStoredAuth());
+
+  useEffect(() => {
+    persistAuth(auth);
+  }, [auth]);
+
+  const handleLogout = () => {
+    setAuth(null);
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -30,22 +74,25 @@ function App() {
             <p className="eyebrow">TravelConnect Africa (Pty) Ltd</p>
             <h2>Modern tourism operations at scale</h2>
           </div>
-          <button className="primary-btn">+ New Booking</button>
+          <div className="topbar-actions">
+            {auth ? <span className="status-badge confirmed">Signed in as {auth.user.email}</span> : <span className="status-badge pending">Not signed in</span>}
+            {auth ? <button className="secondary-btn" onClick={handleLogout}>Logout</button> : <NavLink to="/auth" className="primary-btn">Sign in</NavLink>}
+          </div>
         </header>
 
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/users" element={<UsersPage />} />
-          <Route path="/hotels" element={<HotelsPage />} />
-          <Route path="/bookings" element={<BookingsPage />} />
-          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/" element={<DashboardPage auth={auth} />} />
+          <Route path="/users" element={<UsersPage auth={auth} />} />
+          <Route path="/hotels" element={<HotelsPage auth={auth} />} />
+          <Route path="/bookings" element={<BookingsPage auth={auth} />} />
+          <Route path="/auth" element={<AuthPage auth={auth} onAuthChange={setAuth} />} />
         </Routes>
       </main>
     </div>
   );
 }
 
-function DashboardPage() {
+function DashboardPage({ auth }: { auth: AuthState | null }) {
   return (
     <section className="grid">
       <article className="card hero-card">
@@ -83,7 +130,7 @@ function DashboardPage() {
   );
 }
 
-function UsersPage() {
+function UsersPage({ auth }: { auth: AuthState | null }) {
   return (
     <section className="grid">
       <article className="card">
@@ -102,7 +149,7 @@ function UsersPage() {
   );
 }
 
-function HotelsPage() {
+function HotelsPage({ auth }: { auth: AuthState | null }) {
   const [hotels, setHotels] = useState<any[]>([]);
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
@@ -117,8 +164,13 @@ function HotelsPage() {
   const [availabilityCount, setAvailabilityCount] = useState('1');
 
   const loadHotels = async () => {
+    if (!auth?.token) {
+      setHotels([]);
+      return;
+    }
+
     try {
-      const response = await axios.get('/api/hotels', { headers: { Authorization: 'Bearer test-token' } });
+      const response = await axios.get('/api/hotels', { headers: { Authorization: `Bearer ${auth.token}` } });
       setHotels(response.data.hotels || []);
     } catch {
       setHotels([]);
@@ -127,7 +179,7 @@ function HotelsPage() {
 
   useEffect(() => {
     loadHotels();
-  }, []);
+  }, [auth?.token]);
 
   const resetHotelForm = () => {
     setName('');
@@ -141,9 +193,9 @@ function HotelsPage() {
     event.preventDefault();
     try {
       if (editingHotelId) {
-        await axios.put(`/api/hotels/${editingHotelId}`, { name, city, country, status }, { headers: { Authorization: 'Bearer test-token' } });
+        await axios.put(`/api/hotels/${editingHotelId}`, { name, city, country, status }, { headers: { Authorization: `Bearer ${auth?.token}` } });
       } else {
-        await axios.post('/api/hotels', { name, city, country, status }, { headers: { Authorization: 'Bearer test-token' } });
+        await axios.post('/api/hotels', { name, city, country, status }, { headers: { Authorization: `Bearer ${auth?.token}` } });
       }
       resetHotelForm();
       await loadHotels();
@@ -162,7 +214,7 @@ function HotelsPage() {
 
   const handleDeleteHotel = async (hotelId: string) => {
     try {
-      await axios.delete(`/api/hotels/${hotelId}`, { headers: { Authorization: 'Bearer test-token' } });
+      await axios.delete(`/api/hotels/${hotelId}`, { headers: { Authorization: `Bearer ${auth?.token}` } });
       await loadHotels();
     } catch {
       // No-op for now
@@ -174,7 +226,7 @@ function HotelsPage() {
     const hotelId = hotels[0]?.id;
     if (!hotelId) return;
     try {
-      await axios.post(`/api/hotels/${hotelId}/rooms`, { name: roomName, category: roomCategory, price: roomPrice, inventory: roomInventory }, { headers: { Authorization: 'Bearer test-token' } });
+      await axios.post(`/api/hotels/${hotelId}/rooms`, { name: roomName, category: roomCategory, price: roomPrice, inventory: roomInventory }, { headers: { Authorization: `Bearer ${auth?.token}` } });
       setRoomName('');
       setRoomCategory('standard');
       setRoomPrice('');
@@ -189,7 +241,7 @@ function HotelsPage() {
     const hotelId = hotels[0]?.id;
     if (!hotelId) return;
     try {
-      await axios.post(`/api/hotels/${hotelId}/availability`, { roomId: 'placeholder-room', date: availabilityDate, available: availabilityCount }, { headers: { Authorization: 'Bearer test-token' } });
+      await axios.post(`/api/hotels/${hotelId}/availability`, { roomId: 'placeholder-room', date: availabilityDate, available: availabilityCount }, { headers: { Authorization: `Bearer ${auth?.token}` } });
       setAvailabilityDate('');
       setAvailabilityCount('1');
     } catch {
@@ -256,7 +308,7 @@ function HotelsPage() {
   );
 }
 
-function BookingsPage() {
+function BookingsPage({ auth }: { auth: AuthState | null }) {
   const [bookings, setBookings] = useState<any[]>([]);
   const [guestName, setGuestName] = useState('');
   const [hotelId, setHotelId] = useState('');
@@ -265,8 +317,13 @@ function BookingsPage() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
   const loadBookings = async () => {
+    if (!auth?.token) {
+      setBookings([]);
+      return;
+    }
+
     try {
-      const response = await axios.get('/api/bookings', { headers: { Authorization: 'Bearer test-token' } });
+      const response = await axios.get('/api/bookings', { headers: { Authorization: `Bearer ${auth.token}` } });
       setBookings(response.data.bookings || []);
     } catch {
       setBookings([]);
@@ -275,7 +332,7 @@ function BookingsPage() {
 
   useEffect(() => {
     loadBookings();
-  }, []);
+  }, [auth?.token]);
 
   const resetBookingForm = () => {
     setGuestName('');
@@ -288,7 +345,7 @@ function BookingsPage() {
   const handleCreateBooking = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      await axios.post('/api/bookings', { guestName, hotelId, status }, { headers: { Authorization: 'Bearer test-token' } });
+      await axios.post('/api/bookings', { guestName, hotelId, status }, { headers: { Authorization: `Bearer ${auth?.token}` } });
       resetBookingForm();
       await loadBookings();
     } catch {
@@ -304,7 +361,7 @@ function BookingsPage() {
   const handleStatusUpdate = async () => {
     if (!selectedBookingId) return;
     try {
-      await axios.post(`/api/bookings/${selectedBookingId}/status`, { status: statusUpdate || 'confirmed' }, { headers: { Authorization: 'Bearer test-token' } });
+      await axios.post(`/api/bookings/${selectedBookingId}/status`, { status: statusUpdate || 'confirmed' }, { headers: { Authorization: `Bearer ${auth?.token}` } });
       setStatusUpdate('confirmed');
       await loadBookings();
     } catch {
@@ -314,7 +371,7 @@ function BookingsPage() {
 
   const handleDeleteBooking = async (bookingId: string) => {
     try {
-      await axios.delete(`/api/bookings/${bookingId}`, { headers: { Authorization: 'Bearer test-token' } });
+      await axios.delete(`/api/bookings/${bookingId}`, { headers: { Authorization: `Bearer ${auth?.token}` } });
       await loadBookings();
     } catch {
       // No-op for now
@@ -368,26 +425,65 @@ function BookingsPage() {
   );
 }
 
-function AuthPage() {
+function AuthPage({ auth, onAuthChange }: { auth: AuthState | null; onAuthChange: (auth: AuthState | null) => void }) {
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [registerName, setRegisterName] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
+
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const response = await axios.post('/api/auth/login', { email: loginEmail, password: loginPassword });
+      onAuthChange(response.data);
+      setMessage('Signed in successfully');
+      setIsError(false);
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || 'Unable to sign in');
+      setIsError(true);
+    }
+  };
+
+  const handleRegister = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const registerResponse = await axios.post('/api/auth/register', { name: registerName, email: registerEmail, password: registerPassword });
+      if (registerResponse.data.success) {
+        const loginResponse = await axios.post('/api/auth/login', { email: registerEmail, password: registerPassword });
+        onAuthChange(loginResponse.data);
+        setMessage('Account created and signed in');
+        setIsError(false);
+      }
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || 'Unable to create account');
+      setIsError(true);
+    }
+  };
+
   return (
     <section className="grid two-col">
+      {message ? <div className={`message ${isError ? 'error' : 'success'}`}>{message}</div> : null}
       <article className="card auth-card">
         <h3>Login</h3>
-        <form className="form-stack">
-          <input placeholder="Email" />
-          <input placeholder="Password" type="password" />
-          <button className="primary-btn">Sign in</button>
+        <form className="form-stack" onSubmit={handleLogin}>
+          <input value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} placeholder="Email" />
+          <input value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} placeholder="Password" type="password" />
+          <button className="primary-btn" type="submit">Sign in</button>
         </form>
       </article>
       <article className="card auth-card">
         <h3>Register</h3>
-        <form className="form-stack">
-          <input placeholder="Full name" />
-          <input placeholder="Email" />
-          <input placeholder="Password" type="password" />
-          <button className="primary-btn">Create account</button>
+        <form className="form-stack" onSubmit={handleRegister}>
+          <input value={registerName} onChange={(event) => setRegisterName(event.target.value)} placeholder="Full name" />
+          <input value={registerEmail} onChange={(event) => setRegisterEmail(event.target.value)} placeholder="Email" />
+          <input value={registerPassword} onChange={(event) => setRegisterPassword(event.target.value)} placeholder="Password" type="password" />
+          <button className="primary-btn" type="submit">Create account</button>
         </form>
       </article>
+      {auth ? <div className="message success">You are currently signed in and can manage hotels and bookings.</div> : null}
     </section>
   );
 }
