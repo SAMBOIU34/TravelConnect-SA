@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { Building2, LayoutDashboard, Users, Hotel, LogIn, ShieldCheck, CalendarDays, BedDouble, CheckCircle2, Clock3, PlusCircle } from 'lucide-react';
+import axios from 'axios';
 
 function App() {
   return (
@@ -101,17 +103,51 @@ function UsersPage() {
 }
 
 function HotelsPage() {
+  const [hotels, setHotels] = useState<any[]>([]);
+  const [name, setName] = useState('');
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('South Africa');
+  const [status, setStatus] = useState('pending');
+
+  const loadHotels = async () => {
+    try {
+      const response = await axios.get('/api/hotels', { headers: { Authorization: 'Bearer test-token' } });
+      setHotels(response.data.hotels || []);
+    } catch {
+      setHotels([]);
+    }
+  };
+
+  useEffect(() => {
+    loadHotels();
+  }, []);
+
+  const handleCreateHotel = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await axios.post('/api/hotels', { name, city, country, status }, { headers: { Authorization: 'Bearer test-token' } });
+      setName('');
+      setCity('');
+      setCountry('South Africa');
+      setStatus('pending');
+      loadHotels();
+    } catch {
+      // No-op for now
+    }
+  };
+
   return (
     <section className="grid">
       <article className="card">
         <div className="card-title"><Building2 size={18} /> Hotel Administration</div>
         <p>Register properties, manage rooms, pricing, availability, and approval states from a single admin workspace.</p>
-        <div className="form-stack">
-          <input placeholder="Hotel name" />
-          <input placeholder="City" />
-          <input placeholder="Country" />
-          <button className="primary-btn">Create hotel</button>
-        </div>
+        <form className="form-stack" onSubmit={handleCreateHotel}>
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Hotel name" />
+          <input value={city} onChange={(event) => setCity(event.target.value)} placeholder="City" />
+          <input value={country} onChange={(event) => setCountry(event.target.value)} placeholder="Country" />
+          <input value={status} onChange={(event) => setStatus(event.target.value)} placeholder="Status" />
+          <button className="primary-btn" type="submit">Create hotel</button>
+        </form>
       </article>
 
       <article className="card">
@@ -135,9 +171,9 @@ function HotelsPage() {
       <article className="card">
         <div className="card-title"><CheckCircle2 size={18} /> Approval Queue</div>
         <ul className="list">
-          <li>Approve or reject hotel submissions</li>
-          <li>Flag properties that need updates</li>
-          <li>Track status history for review audits</li>
+          {hotels.map((hotel) => (
+            <li key={hotel.id}>{hotel.name} — {hotel.status}</li>
+          ))}
         </ul>
       </article>
     </section>
@@ -145,6 +181,37 @@ function HotelsPage() {
 }
 
 function BookingsPage() {
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [guestName, setGuestName] = useState('');
+  const [hotelId, setHotelId] = useState('');
+  const [status, setStatus] = useState('pending');
+
+  const loadBookings = async () => {
+    try {
+      const response = await axios.get('/api/bookings', { headers: { Authorization: 'Bearer test-token' } });
+      setBookings(response.data.bookings || []);
+    } catch {
+      setBookings([]);
+    }
+  };
+
+  useEffect(() => {
+    loadBookings();
+  }, []);
+
+  const handleCreateBooking = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await axios.post('/api/bookings', { guestName, hotelId, status }, { headers: { Authorization: 'Bearer test-token' } });
+      setGuestName('');
+      setHotelId('');
+      setStatus('pending');
+      loadBookings();
+    } catch {
+      // No-op for now
+    }
+  };
+
   return (
     <section className="grid">
       <article className="card">
@@ -155,20 +222,20 @@ function BookingsPage() {
       <article className="card">
         <div className="card-title"><Clock3 size={18} /> Booking Queue</div>
         <ul className="list">
-          <li>Pending stays requiring confirmation</li>
-          <li>Confirmed bookings with active reservations</li>
-          <li>Cancelled bookings with audit trail details</li>
+          {bookings.map((booking) => (
+            <li key={booking.id}>{booking.guestName} — {booking.status}</li>
+          ))}
         </ul>
       </article>
 
       <article className="card">
         <div className="card-title"><PlusCircle size={18} /> Create Booking</div>
-        <div className="form-stack">
-          <input placeholder="Guest name" />
-          <input placeholder="Hotel ID" />
-          <input placeholder="Booking status" />
-          <button className="primary-btn">Create booking</button>
-        </div>
+        <form className="form-stack" onSubmit={handleCreateBooking}>
+          <input value={guestName} onChange={(event) => setGuestName(event.target.value)} placeholder="Guest name" />
+          <input value={hotelId} onChange={(event) => setHotelId(event.target.value)} placeholder="Hotel ID" />
+          <input value={status} onChange={(event) => setStatus(event.target.value)} placeholder="Booking status" />
+          <button className="primary-btn" type="submit">Create booking</button>
+        </form>
       </article>
     </section>
   );
