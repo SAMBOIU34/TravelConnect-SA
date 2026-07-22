@@ -67,14 +67,30 @@ function generateBase32Secret(length = 20) {
   return secret;
 }
 
+function decodeBase32(secret) {
+  const normalized = secret.replace(/=+$/g, '').toUpperCase();
+  let bits = '';
+  for (const char of normalized) {
+    const value = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(char);
+    if (value < 0) continue;
+    bits += value.toString(2).padStart(5, '0');
+  }
+
+  const bytes = [];
+  for (let index = 0; index + 8 <= bits.length; index += 8) {
+    bytes.push(parseInt(bits.slice(index, index + 8), 2));
+  }
+  return Buffer.from(bytes);
+}
+
 function generateTotpCode(secret, time = Date.now()) {
-  const counter = Math.floor(time / 30000);
+  let counter = Math.floor(time / 30000);
   const buffer = Buffer.alloc(8);
   for (let index = 7; index >= 0; index -= 1) {
     buffer[index] = counter & 0xff;
     counter >>= 8;
   }
-  const key = Buffer.from(secret.replace(/=/g, ''), 'base64');
+  const key = decodeBase32(secret);
   const hmac = crypto.createHmac('sha1', key).update(buffer).digest();
   const offset = hmac[hmac.length - 1] & 0x0f;
   const binary = ((hmac[offset] & 0x7f) << 24) | ((hmac[offset + 1] & 0xff) << 16) | ((hmac[offset + 2] & 0xff) << 8) | (hmac[offset + 3] & 0xff);

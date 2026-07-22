@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const request = require('supertest');
-const { createApp, resetDatabaseForTests } = require('../src/server');
+const { createApp, resetDatabaseForTests, generateTotpCode } = require('../src/server');
 
 const dbPath = path.join(__dirname, 'travelconnect-test.sqlite');
 process.env.TRAVELCONNECT_DB_PATH = dbPath;
@@ -24,6 +24,12 @@ test('registers a tenant and creates an admin user', async () => {
 
   assert.equal(response.status, 201);
   assert.equal(response.body.user.role, 'partner');
+});
+
+test('generates a valid TOTP for a known base32 secret', () => {
+  const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  const code = generateTotpCode(secret, 59 * 1000);
+  assert.equal(code, '287082');
 });
 
 test('creates a booking and invoice for a guest', async () => {
