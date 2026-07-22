@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const http = require('node:http');
 const request = require('supertest');
 const { createApp, resetDatabaseForTests, generateTotpCode } = require('../src/server');
 
@@ -74,6 +75,57 @@ test('admin can manage tenant users', async () => {
     .set('Authorization', `Bearer ${adminLogin.body.token}`);
 
   assert.equal(finalListResponse.body.some((user) => user.id === createResponse.body.user.id), false);
+});
+
+test('admin can process queued notifications', async () => {
+  await resetDatabaseForTests();
+  const app = createApp();
+
+  const notificationRequests = [];
+  const deliveryServer = http.createServer((req, res) => {
+    notificationRequests.push(req.url);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+  });
+
+  await new Promise((resolve) => deliveryServer.listen(0, '127.0.0.1', resolve));
+  const { port } = deliveryServer.address();
+  process.env.EMAIL_WEBHOOK = `http://127.0.0.1:${port}`;
+  process.env.SMS_WEBHOOK = `http://127.0.0.1:${port}`;
+
+  try {
+    const registerResponse = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Notify Partner',
+        email: 'notify@example.com',
+        password: 'StrongPass123!',
+        role: 'partner'
+      });
+
+    const adminLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'admin@example.com', password: 'Admin123!' });
+
+    const processResponse = await request(app)
+      .post('/api/admin/notifications/process')
+      .set('Authorization', `Bearer ${adminLogin.body.token}`);
+
+    assert.equal(processResponse.status, 200);
+    assert.ok(processResponse.body.processed >= 1);
+
+    const notificationsResponse = await request(app)
+      .get('/api/notifications')
+      .set('Authorization', `Bearer ${registerResponse.body.token}`);
+
+    assert.equal(notificationsResponse.status, 200);
+    assert.ok(notificationsResponse.body.some((notification) => notification.status === 'sent'));
+    assert.ok(notificationRequests.length >= 1);
+  } finally {
+    await new Promise((resolve, reject) => deliveryServer.close((error) => (error ? reject(error) : resolve())));
+    delete process.env.EMAIL_WEBHOOK;
+    delete process.env.SMS_WEBHOOK;
+  }
 });
 
 test('creates a booking and invoice for a guest', async () => {

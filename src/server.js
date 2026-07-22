@@ -242,23 +242,7 @@ async function recordAuditLog(tenantId, actor, action, details) {
 async function queueNotification(tenantId, recipient, channel, template, payload) {
   const id = uuidv4();
   await runSql('INSERT INTO notifications (id, tenantId, recipient, channel, template, payload, status) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, tenantId, recipient, channel, template, JSON.stringify(payload), 'queued']);
-  const webhook = channel === 'sms' ? process.env.SMS_WEBHOOK : process.env.EMAIL_WEBHOOK;
-  if (!webhook) {
-    await runSql('UPDATE notifications SET status = ? WHERE id = ?', ['sent', id]);
-    return { id, status: 'sent' };
-  }
-  try {
-    await fetch(webhook, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ recipient, template, payload })
-    });
-    await runSql('UPDATE notifications SET status = ? WHERE id = ?', ['sent', id]);
-    return { id, status: 'sent' };
-  } catch (error) {
-    await runSql('UPDATE notifications SET status = ? WHERE id = ?', ['failed', id]);
-    return { id, status: 'failed' };
-  }
+  return { id, status: 'queued' };
 }
 
 async function seedAdminUser() {
@@ -725,6 +709,40 @@ function createApp() {
     try {
       const rows = await allSql('SELECT * FROM notifications WHERE tenantId = ? ORDER BY createdAt DESC LIMIT 20', [req.user.tenantId]);
       res.json(rows);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post('/api/admin/notifications/process', authMiddleware, async (req, res) => {
+    try {
+      const user = await getSql('SELECT role FROM users WHERE id = ? AND deletedAt IS NULL', [req.user.userId]);
+      if (!user || user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+
+      const rows = await allSql('SELECT * FROM notifications WHERE status = ? ORDER BY createdAt ASC LIMIT 20', ['queued']);
+      let processed = 0;
+      for (const row of rows) {
+        const webhook = row.channel === 'sms' ? process.env.SMS_WEBHOOK : process.env.EMAIL_WEBHOOK;
+        if (!webhook) {
+          await runSql('UPDATE notifications SET status = ? WHERE id = ?', ['sent', row.id]);
+          processed += 1;
+          continue;
+        }
+
+        try {
+          await fetch(webhook, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ recipient: row.recipient, template: row.template, payload: JSON.parse(row.payload || '{}') })
+          });
+          await runSql('UPDATE notifications SET status = ? WHERE id = ?', ['sent', row.id]);
+          processed += 1;
+        } catch (error) {
+          await runSql('UPDATE notifications SET status = ? WHERE id = ?', ['failed', row.id]);
+        }
+      }
+
+      res.json({ processed });
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
