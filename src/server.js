@@ -286,6 +286,12 @@ function authMiddleware(req, res, next) {
   }
 }
 
+function sanitizeUser(user) {
+  if (!user) return null;
+  const { password, ...rest } = user;
+  return rest;
+}
+
 function createApp() {
   const app = express();
   app.disable('x-powered-by');
@@ -394,6 +400,132 @@ function createApp() {
 
   app.get('/api/me', authMiddleware, (req, res) => {
     res.json({ user: req.user });
+  });
+
+  app.post('/api/users', authMiddleware, async (req, res) => {
+    try {
+      const { name, email, password, role = 'staff' } = req.body;
+      if (!name || !email || !password) {
+        return res.status(400).json({ message: 'Name, email, and password are required' });
+      }
+
+      const actor = await getSql('SELECT role FROM users WHERE id = ? AND deletedAt IS NULL', [req.user.userId]);
+      if (!actor || actor.role !== 'admin') {
+        return res.status(403).json({ message: 'Admin only' });
+      }
+
+      const existing = await getSql('SELECT id FROM users WHERE email = ? AND deletedAt IS NULL', [email]);
+      if (existing) {
+        return res.status(409).json({ message: 'User already exists' });
+      }
+
+      const userId = uuidv4();
+      const passwordHash = await bcrypt.hash(password, 10);
+      await runSql('INSERT INTO users (id, tenantId, name, email, password, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)', [userId, req.user.tenantId, name, email, passwordHash, role, 'active']);
+      await recordAuditLog(req.user.tenantId, req.user.userId, 'user_created', `Created user ${email}`);
+
+      res.status(201).json({
+        user: {
+          id: userId,
+          tenantId: req.user.tenantId,
+          name,
+          email,
+          role,
+          status: 'active'
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get('/api/users', authMiddleware, async (req, res) => {
+    try {
+      const actor = await getSql('SELECT role FROM users WHERE id = ? AND deletedAt IS NULL', [req.user.userId]);
+      if (!actor || actor.role !== 'admin') {
+        return res.status(403).json({ message: 'Admin only' });
+      }
+
+      const rows = await allSql('SELECT * FROM users WHERE tenantId = ? AND deletedAt IS NULL ORDER BY createdAt DESC', [req.user.tenantId]);
+      res.json(rows.map((user) => sanitizeUser(user)));
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put('/api/users/:id', authMiddleware, async (req, res) => {
+    try {
+      const actor = await getSql('SELECT role FROM users WHERE id = ? AND deletedAt IS NULL', [req.user.userId]);
+      if (!actor || actor.role !== 'admin') {
+        return res.status(403).json({ message: 'Admin only' });
+      }
+
+      const existingUser = await getSql('SELECT * FROM users WHERE id = ? AND tenantId = ? AND deletedAt IS NULL', [req.params.id, req.user.tenantId]);
+      if (!existingUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      const { name, email, role, status, password } = req.body;
+      const updates = [];
+      const values = [];
+
+      if (name !== undefined) {
+        updates.push('name = ?');
+        values.push(name);
+      }
+      if (email !== undefined) {
+        const duplicate = await getSql('SELECT id FROM users WHERE email = ? AND id != ? AND deletedAt IS NULL', [email, req.params.id]);
+        if (duplicate) {
+          return res.status(409).json({ message: 'User already exists' });
+        }
+        updates.push('email = ?');
+        values.push(email);
+      }
+      if (role !== undefined) {
+        updates.push('role = ?');
+        values.push(role);
+      }
+      if (status !== undefined) {
+        updates.push('status = ?');
+        values.push(status);
+      }
+      if (password !== undefined) {
+        const passwordHash = await bcrypt.hash(password, 10);
+        updates.push('password = ?');
+        values.push(passwordHash);
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({ message: 'No updates provided' });
+      }
+
+      values.push(req.params.id);
+      await runSql(`UPDATE users SET ${updates.join(', ')}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, values);
+      const updatedUser = await getSql('SELECT * FROM users WHERE id = ? AND tenantId = ? AND deletedAt IS NULL', [req.params.id, req.user.tenantId]);
+      await recordAuditLog(req.user.tenantId, req.user.userId, 'user_updated', `Updated user ${req.params.id}`);
+      res.json({ user: sanitizeUser(updatedUser) });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete('/api/users/:id', authMiddleware, async (req, res) => {
+    try {
+      const actor = await getSql('SELECT role FROM users WHERE id = ? AND deletedAt IS NULL', [req.user.userId]);
+      if (!actor || actor.role !== 'admin') {
+        return res.status(403).json({ message: 'Admin only' });
+      }
+
+      const result = await runSql('UPDATE users SET deletedAt = CURRENT_TIMESTAMP, updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND tenantId = ? AND deletedAt IS NULL', [req.params.id, req.user.tenantId]);
+      if (result.changes === 0) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      await recordAuditLog(req.user.tenantId, req.user.userId, 'user_deleted', `Deleted user ${req.params.id}`);
+      res.json({ id: req.params.id, status: 'deleted' });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
   });
 
   app.get('/api/tenants', authMiddleware, async (req, res) => {

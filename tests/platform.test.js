@@ -32,6 +32,50 @@ test('generates a valid TOTP for a known base32 secret', () => {
   assert.equal(code, '287082');
 });
 
+test('admin can manage tenant users', async () => {
+  await resetDatabaseForTests();
+  const app = createApp();
+
+  const adminLogin = await request(app)
+    .post('/api/auth/login')
+    .send({ email: 'admin@example.com', password: 'Admin123!' });
+
+  const createResponse = await request(app)
+    .post('/api/users')
+    .set('Authorization', `Bearer ${adminLogin.body.token}`)
+    .send({ name: 'Jane Staff', email: 'jane@example.com', password: 'StrongPass123!', role: 'staff' });
+
+  assert.equal(createResponse.status, 201);
+  assert.equal(createResponse.body.user.email, 'jane@example.com');
+
+  const listResponse = await request(app)
+    .get('/api/users')
+    .set('Authorization', `Bearer ${adminLogin.body.token}`);
+
+  assert.equal(listResponse.status, 200);
+  assert.ok(listResponse.body.some((user) => user.email === 'jane@example.com'));
+
+  const updateResponse = await request(app)
+    .put(`/api/users/${createResponse.body.user.id}`)
+    .set('Authorization', `Bearer ${adminLogin.body.token}`)
+    .send({ role: 'manager' });
+
+  assert.equal(updateResponse.status, 200);
+  assert.equal(updateResponse.body.user.role, 'manager');
+
+  const deleteResponse = await request(app)
+    .delete(`/api/users/${createResponse.body.user.id}`)
+    .set('Authorization', `Bearer ${adminLogin.body.token}`);
+
+  assert.equal(deleteResponse.status, 200);
+
+  const finalListResponse = await request(app)
+    .get('/api/users')
+    .set('Authorization', `Bearer ${adminLogin.body.token}`);
+
+  assert.equal(finalListResponse.body.some((user) => user.id === createResponse.body.user.id), false);
+});
+
 test('creates a booking and invoice for a guest', async () => {
   await resetDatabaseForTests();
   const app = createApp();
