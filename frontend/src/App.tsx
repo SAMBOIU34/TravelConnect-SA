@@ -119,12 +119,17 @@ function DashboardPage({ auth }: { auth: AuthState | null }) {
       </article>
 
       <article className="card">
-        <div className="card-title"><Building2 size={18}/> Properties</div>
+        <div className="card-title"><Building2 size={18}/> Live Operations</div>
         <ul className="list">
           <li>7 new approvals pending</li>
           <li>8 amenities configured</li>
           <li>3 properties need images</li>
         </ul>
+      </article>
+
+      <article className="card">
+        <div className="card-title"><Users size={18}/> Admin Access</div>
+        <p>{auth ? `Signed in as ${auth.user.email} with ${auth.user.role} privileges.` : 'Sign in to unlock management screens and audit tools.'}</p>
       </article>
     </section>
   );

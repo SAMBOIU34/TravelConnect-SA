@@ -76,4 +76,26 @@ describe('hotel and booking persistence', () => {
     expect(deleteBookingResponse.status).toBe(200);
     expect(deleteHotelResponse.status).toBe(200);
   });
+
+  it('exposes audit logs and role updates for admins', async () => {
+    const adminToken = signToken({ sub: 'admin-user', role: 'admin' });
+    const registerResponse = await request(app)
+      .post('/api/auth/register')
+      .send({ name: 'Role User', email: 'role.user@example.com', password: 'Password123!' });
+
+    const userId = registerResponse.body.user.id;
+
+    const roleResponse = await request(app)
+      .put(`/api/users/${userId}/role`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ role: 'admin' });
+
+    const auditResponse = await request(app)
+      .get('/api/audit')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(roleResponse.status).toBe(200);
+    expect(auditResponse.status).toBe(200);
+    expect(auditResponse.body.auditEntries.length).toBeGreaterThan(0);
+  });
 });

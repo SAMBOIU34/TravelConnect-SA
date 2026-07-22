@@ -40,3 +40,17 @@ export function createUser(input: Omit<UserRecord, 'id' | 'createdAt' | 'updated
 
   return user;
 }
+
+export function updateUserRole(id: string, role: string) {
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT id, name, email, password_hash AS passwordHash, role, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt FROM users WHERE id = ?').get(id) as any | undefined;
+  if (!existing) return undefined;
+
+  db.prepare(`
+    UPDATE users
+    SET role = ?, updated_at = ?
+    WHERE id = ?
+  `).run(role, now, id);
+
+  return { ...existing, role, updatedAt: now, isActive: Boolean(existing.isActive) } as UserRecord;
+}
